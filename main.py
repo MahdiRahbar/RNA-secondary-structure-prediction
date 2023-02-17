@@ -28,8 +28,8 @@ import torch.optim as optim
 from time import sleep
 from tqdm import tqdm
 
-from model import * 
-from preprocess import *
+from app.model import * 
+from app.preprocess import *
 
 if sys.version_info < (3,0,0):
     print('Python 3 required!!!')
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     print('Build a model..')
     model = ''
     #arch_depth=4
-    model = rna_pair_prediction_bin_gcn5(num_gcn_layers = arch_depth, filter_size = filter_size_2d, num_lstm_layers = lstm_layers, hidden_dim = filters_per_layer, regularize=regularize, dropout_rate = dropout_rate, dilation_size=1)
+    model = rna_pair_prediction_bin_gcn5(num_gcn_layers = arch_depth, filter_size = filter_size_2d, num_lstm_layers = lstm_layers, hidden_dim = filters_per_layer, regularize=regularize, dropout_rate = dropout_rate, dilation_size=1, feature_type= feature_type)
 
 
     print('')
@@ -229,11 +229,11 @@ if __name__ == "__main__":
     pdb_test3_data = dataset[((dataset['DataSource'] == 'PDB') & (dataset['DataType']== 'Test_hard'))].reset_index(drop=True)
 
 
-    bpRNA_train_generator = RnaGenerator_augment_gcn(bpRNA_train_data, batch_size, expected_n_channels)
-    bpRNA_valid_generator = RnaGenerator_augment_gcn(bpRNA_valid_data, batch_size, expected_n_channels)
+    bpRNA_train_generator = RnaGenerator_augment_gcn(bpRNA_train_data, batch_size, expected_n_channels, feature_type, include_pseudoknots)
+    bpRNA_valid_generator = RnaGenerator_augment_gcn(bpRNA_valid_data, batch_size, expected_n_channels, feature_type, include_pseudoknots)
 
-    PDB_train_generator = RnaGenerator_augment_gcn(pdb_train_data, batch_size, expected_n_channels)
-    PDB_valid_generator = RnaGenerator_augment_gcn(pdb_valid_data, batch_size, expected_n_channels)
+    PDB_train_generator = RnaGenerator_augment_gcn(pdb_train_data, batch_size, expected_n_channels, feature_type, include_pseudoknots)
+    PDB_valid_generator = RnaGenerator_augment_gcn(pdb_valid_data, batch_size, expected_n_channels, feature_type, include_pseudoknots)
 
 
     print('')
