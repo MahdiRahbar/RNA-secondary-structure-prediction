@@ -26,8 +26,16 @@ epsilon = tf.keras.backend.epsilon()
 
 
 
-def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, voc_edges_in = 2, voc_edges_out = 1, voc_nodes_out = 2, num_gcn_layers = 10, num_lstm_layers = 2, lstm_filter = 8, aggregation = "mean", regularize=False, dropout_rate = 0.25, dilation_size = 1, filter_size=3):
-    global feature_type
+def ReshapeConv_to_LSTM(x):
+    reshape=K.expand_dims(x,0)
+    return reshape
+
+def ReshapeLSTM_to_Conv(x):
+    reshape=K.squeeze(x,0)
+    return reshape
+
+
+def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, voc_edges_in = 2, voc_edges_out = 1, voc_nodes_out = 2, num_gcn_layers = 10, num_lstm_layers = 2, lstm_filter = 8, aggregation = "mean", regularize=False, dropout_rate = 0.25, dilation_size = 1, filter_size=3, feature_type=0):
     dropout_value = dropout_rate
     # Node embedding
     node_input = Input(shape = (node_num,node_dim))
