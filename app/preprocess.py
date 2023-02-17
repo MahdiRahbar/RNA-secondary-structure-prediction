@@ -29,6 +29,11 @@ import torch.optim as optim
 from time import sleep
 from tqdm import tqdm
 
+from tensorflow.keras.utils import *
+import tensorflow as tf
+
+from tensorflow.keras import backend as K
+
 
 if flag_plots:
     #%matplotlib inline
@@ -63,10 +68,9 @@ physicochemical_property_indices = {'AA':[2,0,-6.6,-6.82,-18.4,-19,-0.9,-0.93,0,
 import logging, os 
 logging.disable(logging.WARNING) 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+expected_n_channels =4 
 
-
-
-import glob
+from .config import *
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -102,13 +106,7 @@ def get_args():
 
 
 
-def ReshapeConv_to_LSTM(x):
-    reshape=K.expand_dims(x,0)
-    return reshape
 
-def ReshapeLSTM_to_Conv(x):
-    reshape=K.squeeze(x,0)
-    return reshape
 
 
 def weighted_binary_crossentropy_ntRegularized(y_true, y_pred) :
@@ -174,10 +172,11 @@ class RnaGenerator_augment_gcn_torch():
     pass 
 
 class RnaGenerator_augment_gcn_torch(Dataset):
-    def __init__(self, dataset, batch_size, expected_n_channels):
+    def __init__(self, dataset, batch_size, expected_n_channels, feature_type, include_pseudoknots):
         self.batch_size = batch_size
         self.expected_n_channels = expected_n_channels
-        
+        self.feature_type = feature_type 
+        self.include_pseudoknots = include_pseudoknots
         # sort table by length
         self.dataset = dataset.sort_values(["Length"], ascending=True).reset_index(drop=True)
 
@@ -186,16 +185,18 @@ class RnaGenerator_augment_gcn_torch(Dataset):
 
     def __getitem__(self, index):
         batch_data = self.dataset.iloc[index * self.batch_size: (index + 1) * self.batch_size] 
-        [X,EE_val,EE_adj], [Y, nt_Y ] = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
+        [X,EE_val,EE_adj], [Y, nt_Y ] = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels, feature_type = self.feature_type, include_pseudoknots= self.include_pseudoknots)
         return [X,EE_val,EE_adj], [Y, nt_Y ]
 
 
 
 class RnaGenerator_augment_gcn(Sequence):
-    def __init__(self, dataset, batch_size, expected_n_channels):
+    def __init__(self, dataset, batch_size, expected_n_channels, feature_type, include_pseudoknots):
         self.batch_size = batch_size
         self.expected_n_channels = expected_n_channels
-        
+        self.feature_type = feature_type 
+        self.include_pseudoknots = include_pseudoknots
+
         # sort table by length
         self.dataset = dataset.sort_values(["Length"], ascending=True).reset_index(drop=True)
 
@@ -209,12 +210,12 @@ class RnaGenerator_augment_gcn(Sequence):
     def __getitem__(self, index):
         batch_data = self.dataset.iloc[index * self.batch_size: (index + 1) * self.batch_size] # select rows of dataframe
         
-        X,EE_val,EE_adj, Y, nt_Y = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
+        X,EE_val,EE_adj, Y, nt_Y = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels, feature_type = self.feature_type, include_pseudoknots= self.include_pseudoknots)
         
         return [X,EE_val,EE_adj], [Y, nt_Y ]
         
 
-def get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = 0):
+def get_feature_and_y_ntApairRegularized_gcn(batch_data, i,include_pseudoknots, fea_type = 0 ):
 
         #X, E_val, E_adj,Y0,nt_Y0,pair_Y0 = get_feature_and_y_ntApairRegularized_gcn(rna, all_ct_paths, expected_n_channels, fea_type = feature_type)
         sequence = batch_data['Sequence'][i]
@@ -640,7 +641,7 @@ def get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = 0):
         return X, E_val, E_adj, Y0, nt_Y0
 
 
-def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected_n_channels):
+def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected_n_channels, feature_type, include_pseudoknots):
     # get maximum length
     OUTL = batch_data["Length"].max()
 
@@ -673,7 +674,7 @@ def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected
     for i in batch_data.index:
         rna = batch_data['RNA_ID'][i]
         
-        X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = feature_type)
+        X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(batch_data, i, include_pseudoknots,  fea_type = feature_type)
 
         assert len(X[0, :]) == expected_n_channels
         assert len(X[:, 0]) >= len(Y0[:, 0])
