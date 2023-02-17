@@ -1,0 +1,1 @@
+loss_ratio = 1 
