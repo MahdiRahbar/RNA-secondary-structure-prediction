@@ -106,9 +106,6 @@ def get_args():
 
 
 
-
-
-
 def weighted_binary_crossentropy_ntRegularized(y_true, y_pred) :
     y_true = K.clip(y_true, K.epsilon(), 1-K.epsilon())
     y_pred = K.clip(y_pred, K.epsilon(), 1-K.epsilon())
@@ -145,7 +142,6 @@ def weighted_binary_crossentropy_pairRegularized(y_true, y_pred):
     #    sess.run(tf.global_variables_initializer())
     #    #print (sess.run(slice_y_greater_than_one)) # [2 4]
     #    print (sess.run(new_tensor)) # [2 4]
-
 
     contact = tf.reduce_sum(K.cast(K.equal(y_true_sub, 1), tf.int32))/2
     non_contact = tf.reduce_sum(K.cast(K.equal(y_true_sub, 0), tf.int32))/2
@@ -185,7 +181,8 @@ class RnaGenerator_augment_gcn_torch(Dataset):
 
     def __getitem__(self, index):
         batch_data = self.dataset.iloc[index * self.batch_size: (index + 1) * self.batch_size] 
-        [X,EE_val,EE_adj], [Y, nt_Y ] = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels, feature_type = self.feature_type, include_pseudoknots= self.include_pseudoknots)
+        X,EE_val,EE_adj, Y, nt_Y = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels, feature_type = self.feature_type, include_pseudoknots= self.include_pseudoknots)
+
         return [X,EE_val,EE_adj], [Y, nt_Y ]
 
 
