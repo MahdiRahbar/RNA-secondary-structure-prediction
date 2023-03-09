@@ -11,6 +11,8 @@ import pandas as pd
 flag_plots = False
 
 
+import dgl
+
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -266,7 +268,7 @@ def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, vo
         """
     
         #node_Ux = Dense(hidden_dim,use_bias=True)(x_in)  # B x V x H
-        node_Ux = Conv1D(hidden_dim, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
+        node_Ux = Conv1D(x, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
         node_Ux = BatchNormalization()(node_Ux)
         node_Ux = Activation('relu')(node_Ux)
         node_Ux = Dropout(dropout_value)(node_Ux)
@@ -477,7 +479,7 @@ class RnaGenerator_augment_gcn(Sequence):
         batch_data = self.dataset.iloc[index * self.batch_size: (index + 1) * self.batch_size] # select rows of dataframe
         
         X,EE_val,EE_adj, Y, nt_Y = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
-        
+
         return [X,EE_val,EE_adj], [Y, nt_Y ]
         
 
@@ -904,7 +906,15 @@ def get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = 0):
         
         # nt label
         nt_Y0[:, :] = nt_contact
-        return X, E_val, E_adj, Y0, nt_Y0
+        
+        ### ---------===========------------============-----------------
+        ###### DGL GRAPH STRUCTURE CREATION 
+        src, dst = np.nonzero(E_adj)
+        g = dgl.graph((src, dst))
+        g.ndata['feat'] = X
+        g.edata['feat'] = E_val
+
+        return g, X, E_val, E_adj, Y0, nt_Y0
 
 
 def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected_n_channels):
@@ -913,7 +923,10 @@ def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected
 
     #### find the dimension
     total_dim = len(batch_data)
-    
+
+    #### Define graph list 
+    g_list = [] 
+
     #### Define node matrix
     XX = np.full((total_dim, OUTL, expected_n_channels), 0)
     
@@ -933,14 +946,13 @@ def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected
     nt_YY = np.full((total_dim, OUTL, OUTL, 1), 0)
     pair_YY = np.full((total_dim, OUTL, OUTL, 1), 0)
     
-    
     #print("Min: ",L_min, " Max: ", OUTL, " Final: ", XX.shape)
     indx = 0
     
     for i in batch_data.index:
         rna = batch_data['RNA_ID'][i]
         
-        X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = feature_type)
+        g, X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = feature_type)
 
         assert len(X[0, :]) == expected_n_channels
         assert len(X[:, 0]) >= len(Y0[:, 0])
@@ -949,6 +961,8 @@ def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected
             print('WARNING!! Different len(X) and len(Y) for ', pdb, len(X[:, 0, 0]), len(Y0[:, 0]))
         
         l = len(X[:, 0])
+
+        g_list.append(g)
         XX[indx, :l, :] = X 
         EE_val[indx, :l, :l, :] = E_val
         EE_adj[indx, :l, :l] = E_adj
@@ -957,7 +971,7 @@ def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected
         nt_YY[indx, :l, :l, 0] = nt_Y0
         indx += 1
   
-    return XX.astype(np.float32), EE_val.astype(np.float32), EE_adj.astype(np.float32), YY.astype(np.float32), nt_YY.astype(np.float32)
+    return np.array(g_list), XX.astype(np.float32), EE_val.astype(np.float32), EE_adj.astype(np.float32), YY.astype(np.float32), nt_YY.astype(np.float32)
 
 
 #https://medium.com/analytics-vidhya/custom-metrics-for-keras-tensorflow-ae7036654e05
