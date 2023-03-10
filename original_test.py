@@ -1,4 +1,6 @@
 import os
+os.environ['DGLBACKEND'] = 'tensorflow'
+
 import sys
 import numpy as np
 import datetime
@@ -12,7 +14,7 @@ flag_plots = False
 
 
 import dgl
-
+from dgl.nn import GATConv # , EGNNConv
 
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -149,6 +151,7 @@ def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, vo
     dropout_value = dropout_rate
     # Node embedding
     node_input = Input(shape = (node_num,node_dim))
+    graph_input = Input(shape = (node_num,))
     #nodes_embedding = Dense(hidden_dim, input_dim=(node_num, node_dim),use_bias=False)(node_input) # B x V x H
     nodes_embedding = InstanceNormalization()(node_input)
     if regularize:
@@ -200,133 +203,146 @@ def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, vo
     d_rate = dilation_size
     for layer in range(num_gcn_layers):
         x_in,e_in = nodes_embedding, edge_merge_embedding
+        # Defining the graph input 
         
-        #class ResidualGatedGCNLayer(nn.Module):
-        """Convnet layer with gating and residual connection.
-        """
-        """
-        Args:
-            x: Node features (batch_size, num_nodes, hidden_dim)
-            e: Edge features (batch_size, num_nodes, num_nodes, hidden_dim)
+        # #class ResidualGatedGCNLayer(nn.Module):
+        # """Convnet layer with gating and residual connection.
+        # """
+        # """
+        # Args:
+        #     x: Node features (batch_size, num_nodes, hidden_dim)
+        #     e: Edge features (batch_size, num_nodes, num_nodes, hidden_dim)
     
-        Returns:
-            x_new: Convolved node features (batch_size, num_nodes, hidden_dim)
-            e_new: Convolved edge features (batch_size, num_nodes, num_nodes, hidden_dim)
-        """
+        # Returns:
+        #     x_new: Convolved node features (batch_size, num_nodes, hidden_dim)
+        #     e_new: Convolved edge features (batch_size, num_nodes, num_nodes, hidden_dim)
+        # """
     
-        ################# (1.1) Edge convolution (class EdgeFeatures(nn.Module))
-        """Convnet features for edges.
-        e_ij = U*e_ij + V*(x_i + x_j)
-        """
-        #edge_Ue = Dense(hidden_dim,use_bias=True)(e_in) # B x V x V x H
-        if regularize:
-          edge_Ue = Convolution2D(hidden_dim, kernel_size = (filter_size, filter_size), dilation_rate = (d_rate,d_rate), kernel_initializer = 'he_normal', kernel_regularizer = l2(0.0001), padding = 'same')(e_in)
-        else:
-          edge_Ue = Convolution2D(hidden_dim, kernel_size = (filter_size, filter_size), dilation_rate = (d_rate,d_rate), kernel_initializer = 'he_normal', padding = 'same')(e_in)
-        edge_Ue = Activation('relu')(edge_Ue)
-        edge_Ue = BatchNormalization()(edge_Ue)
-        edge_Ue = Dropout(dropout_value)(edge_Ue)
+        # ################# (1.1) Edge convolution (class EdgeFeatures(nn.Module))
+        # """Convnet features for edges.
+        # e_ij = U*e_ij + V*(x_i + x_j)
+        # """
+        # #edge_Ue = Dense(hidden_dim,use_bias=True)(e_in) # B x V x V x H
+        # if regularize:
+        #   edge_Ue = Convolution2D(hidden_dim, kernel_size = (filter_size, filter_size), dilation_rate = (d_rate,d_rate), kernel_initializer = 'he_normal', kernel_regularizer = l2(0.0001), padding = 'same')(e_in)
+        # else:
+        #   edge_Ue = Convolution2D(hidden_dim, kernel_size = (filter_size, filter_size), dilation_rate = (d_rate,d_rate), kernel_initializer = 'he_normal', padding = 'same')(e_in)
+        # edge_Ue = Activation('relu')(edge_Ue)
+        # edge_Ue = BatchNormalization()(edge_Ue)
+        # edge_Ue = Dropout(dropout_value)(edge_Ue)
         
         
-        #edge_Vx = Dense(hidden_dim,use_bias=True)(x_in) # B x V x H
-        edge_Vx = Conv1D(hidden_dim, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
-        edge_Vx = Activation('relu')(edge_Vx)
-        edge_Vx = BatchNormalization()(edge_Vx)
-        edge_Vx = Dropout(dropout_value)(edge_Vx)
+        # #edge_Vx = Dense(hidden_dim,use_bias=True)(x_in) # B x V x H
+        # edge_Vx = Conv1D(hidden_dim, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
+        # edge_Vx = Activation('relu')(edge_Vx)
+        # edge_Vx = BatchNormalization()(edge_Vx)
+        # edge_Vx = Dropout(dropout_value)(edge_Vx)
         
-        edge_Wx = K.expand_dims(edge_Vx, 2) # Extend Vx from "B x V x H" to "B x V x 1 x H"
-        edge_Vx = K.expand_dims(edge_Vx, 1) # extend Vx from "B x V x H" to "B x 1 x V x H"
-        '''
-        e_new: Convolved edge features (batch_size, num_nodes, num_nodes, hidden_dim)
-        '''
-        #e_new = Ue + Vx + Wx
-        edge_convnet = Add()([edge_Ue, edge_Vx, edge_Wx]) # B x V x V x H
-        #####################################################################
+        # edge_Wx = K.expand_dims(edge_Vx, 2) # Extend Vx from "B x V x H" to "B x V x 1 x H"
+        # edge_Vx = K.expand_dims(edge_Vx, 1) # extend Vx from "B x V x H" to "B x 1 x V x H"
+        # '''
+        # e_new: Convolved edge features (batch_size, num_nodes, num_nodes, hidden_dim)
+        # '''
+        # #e_new = Ue + Vx + Wx
+        # edge_convnet = Add()([edge_Ue, edge_Vx, edge_Wx]) # B x V x V x H
+        # #####################################################################
     
-        ################# (1.2) Compute edge gates ######################### 
-        edge_convnet_gate = Activation('sigmoid')(edge_convnet) # B x V x V x H
-        #####################################################################
+        # ################# (1.2) Compute edge gates ######################### 
+        # edge_convnet_gate = Activation('sigmoid')(edge_convnet) # B x V x V x H
+        # #####################################################################
     
-        ################# (1.3) Node convolution (class NodeFeatures(nn.Module))
-        # self.node_feat = NodeFeatures(hidden_dim, aggregation)
-        """
-        Args:
-            x: Node features (batch_size, num_nodes, hidden_dim)
-            edge_gate: Edge gate values (batch_size, num_nodes, num_nodes, hidden_dim)
+        # ################# (1.3) Node convolution (class NodeFeatures(nn.Module))
+        # # self.node_feat = NodeFeatures(hidden_dim, aggregation)
+        # """
+        # Args:
+        #     x: Node features (batch_size, num_nodes, hidden_dim)
+        #     edge_gate: Edge gate values (batch_size, num_nodes, num_nodes, hidden_dim)
     
-        Returns:
-            node_convnet: Convolved node features (batch_size, num_nodes, hidden_dim)
-        """
+        # Returns:
+        #     node_convnet: Convolved node features (batch_size, num_nodes, hidden_dim)
+        # """
     
-        """Convnet features for nodes.
+        # """Convnet features for nodes.
     
-        Using `sum` aggregation:
-            x_i = U*x_i +  sum_j [ gate_ij * (V*x_j) ]
+        # Using `sum` aggregation:
+        #     x_i = U*x_i +  sum_j [ gate_ij * (V*x_j) ]
     
-        Using `mean` aggregation:
-            x_i = U*x_i + ( sum_j [ gate_ij * (V*x_j) ] / sum_j [ gate_ij] )
-        """
+        # Using `mean` aggregation:
+        #     x_i = U*x_i + ( sum_j [ gate_ij * (V*x_j) ] / sum_j [ gate_ij] )
+        # """
     
-        #node_Ux = Dense(hidden_dim,use_bias=True)(x_in)  # B x V x H
-        node_Ux = Conv1D(x, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
-        node_Ux = BatchNormalization()(node_Ux)
-        node_Ux = Activation('relu')(node_Ux)
-        node_Ux = Dropout(dropout_value)(node_Ux)
+        # #node_Ux = Dense(hidden_dim,use_bias=True)(x_in)  # B x V x H
+        # node_Ux = Conv1D(hidden_dim, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
+        # node_Ux = BatchNormalization()(node_Ux)
+        # node_Ux = Activation('relu')(node_Ux)
+        # node_Ux = Dropout(dropout_value)(node_Ux)
         
-        #node_Vx = Dense(hidden_dim,use_bias=True)(x_in)  # B x V x H
-        node_Vx = Conv1D(hidden_dim, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
-        node_Vx = BatchNormalization()(node_Vx)
-        node_Vx = Activation('relu')(node_Vx)
-        node_Vx = Dropout(dropout_value)(node_Vx)
+        # #node_Vx = Dense(hidden_dim,use_bias=True)(x_in)  # B x V x H
+        # node_Vx = Conv1D(hidden_dim, kernel_size = filter_size, dilation_rate = d_rate, kernel_initializer = 'he_normal', padding = 'same')(x_in)
+        # node_Vx = BatchNormalization()(node_Vx)
+        # node_Vx = Activation('relu')(node_Vx)
+        # node_Vx = Dropout(dropout_value)(node_Vx)
         
-        node_Vx = K.expand_dims(node_Vx, 1)  # extend Vx from "B x V x H" to "B x 1 x V x H"
-        node_gateVx = Multiply()([edge_convnet_gate, node_Vx])  # B x V x V x H
-        if aggregation=="mean":
-            ReduceSum = Lambda(lambda z: K.sum(z, axis=2))
-            node_gateVx_sum = ReduceSum(node_gateVx)
-            edge_convnet_gate_sum = ReduceSum(edge_convnet_gate)
+        # node_Vx = K.expand_dims(node_Vx, 1)  # extend Vx from "B x V x H" to "B x 1 x V x H"
+        # node_gateVx = Multiply()([edge_convnet_gate, node_Vx])  # B x V x V x H
+        # if aggregation=="mean":
+        #     ReduceSum = Lambda(lambda z: K.sum(z, axis=2))
+        #     node_gateVx_sum = ReduceSum(node_gateVx)
+        #     edge_convnet_gate_sum = ReduceSum(edge_convnet_gate)
             
-            divResult = Lambda(lambda x: x[0]/(x[1]+1e-20))
-            mean_node = divResult([node_gateVx_sum,edge_convnet_gate_sum])
-            node_convnet = Add()([node_Ux, mean_node])  # B x V x H
-        elif aggregation=="sum":
-            ReduceSum = Lambda(lambda z: K.sum(z, axis=2))
-            node_gateVx_sum = ReduceSum(node_gateVx)
-            node_convnet = Add()([node_Ux, node_gateVx_sum])  # B x V x H
+        #     divResult = Lambda(lambda x: x[0]/(x[1]+1e-20))
+        #     mean_node = divResult([node_gateVx_sum,edge_convnet_gate_sum])
+        #     node_convnet = Add()([node_Ux, mean_node])  # B x V x H
+        # elif aggregation=="sum":
+        #     ReduceSum = Lambda(lambda z: K.sum(z, axis=2))
+        #     node_gateVx_sum = ReduceSum(node_gateVx)
+        #     node_convnet = Add()([node_Ux, node_gateVx_sum])  # B x V x H
     
-        ################# (1.4) Batch normalization for edge and node
-        """Batch normalization for edge features.
-        """
-        """
-        Args:
-            e: Edge features (batch_size, num_nodes, num_nodes, hidden_dim)
+        # ################# (1.4) Batch normalization for edge and node
+        # """Batch normalization for edge features.
+        # """
+        # """
+        # Args:
+        #     e: Edge features (batch_size, num_nodes, num_nodes, hidden_dim)
     
-        Returns:
-            e_bn: Edge features after batch normalization (batch_size, num_nodes, num_nodes, hidden_dim)
-        """
-        """
-        Args:
-            x: Node features (batch_size, num_nodes, hidden_dim)
+        # Returns:
+        #     e_bn: Edge features after batch normalization (batch_size, num_nodes, num_nodes, hidden_dim)
+        # """
+        # """
+        # Args:
+        #     x: Node features (batch_size, num_nodes, hidden_dim)
     
-        Returns:
-            x_bn: Node features after batch normalization (batch_size, num_nodes, hidden_dim)
-        """
-        # input: edge_convnet
-        edge_convnet = BatchNormalization()(edge_convnet)
-        node_convnet = BatchNormalization()(node_convnet)
+        # Returns:
+        #     x_bn: Node features after batch normalization (batch_size, num_nodes, hidden_dim)
+        # """
+        # # input: edge_convnet
+        # edge_convnet = BatchNormalization()(edge_convnet)
+        # node_convnet = BatchNormalization()(node_convnet)
     
-        ################# (1.5) Relu Activation for edge and node
-        edge_convnet = Activation('relu')(edge_convnet)
-        node_convnet = Activation('relu')(node_convnet)
+        # ################# (1.5) Relu Activation for edge and node
+        # edge_convnet = Activation('relu')(edge_convnet)
+        # node_convnet = Activation('relu')(node_convnet)
     
-        ################# (1.6) Residual connection
-        node_out = Add()([x_in, node_convnet])
-        edge_out = Add()([e_in, edge_convnet])
+        # ################# (1.6) Residual connection
+        # node_out = Add()([x_in, node_convnet])
+        # edge_out = Add()([e_in, edge_convnet])
     
-        ################# (1.7) Update embedding
-        nodes_embedding = node_out  # B x V x H
-        edge_merge_embedding = edge_out  # B x V x V x H
+        # ################# (1.7) Update embedding
+        # nodes_embedding = node_out  # B x V x H
+        # edge_merge_embedding = edge_out  # B x V x V x H
         
+
+        # # https://docs.dgl.ai/generated/dgl.nn.pytorch.conv.EGNNConv.html
+        # nodes_embedding, edge_merge_embedding = EGNNConv(hidden_dim, hidden_dim, hidden_dim)(graph_input, x_in,
+        #                                             edges_adj_input,
+        #                                             e_in)
+
+
+        # https://docs.dgl.ai/generated/dgl.nn.tensorflow.conv.GATConv.html#dgl.nn.tensorflow.conv.GATConv
+        nodes_embedding = GATConv(hidden_dim, 
+                                  hidden_dim, 5)(graph_input,
+                                  x_in)
+
         d_rate = d_rate*2
         if d_rate > 4:
             d_rate = 4
@@ -340,6 +356,12 @@ def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, vo
     #    edge_merge_embedding = Activation('relu')(edge_merge_embedding)
     #y_pred_edges = Dense(voc_edges_out,use_bias=True)(edge_merge_embedding) # B x V x V x voc_edges_out for probability
     
+
+
+
+##### ============= LSTM LAYER START ==========================
+
+
     for i in range(num_lstm_layers):
         # LSTM
         tower_shape = K.int_shape(edge_merge_embedding)
@@ -357,6 +379,11 @@ def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, vo
         
         #tower_shape = K.int_shape(tower)
         #print('4: ',tower_shape,' ',tower_shape[1],' ',tower_shape[2])
+
+
+##### ============= LSTM LAYER END ==========================
+
+
     
     edge_merge_embedding = Activation('relu')(edge_merge_embedding)
     edge_merge_embedding = BatchNormalization()(edge_merge_embedding)
@@ -375,7 +402,7 @@ def rna_pair_prediction_bin_gcn5(node_num = None, node_dim=4, hidden_dim=100, vo
     #y_pred_nodes = Dense(voc_nodes_out,use_bias=True)(nodes_embedding) # B x V x voc_nodes_out for probability
         
     
-    edge_pred_model = Model([node_input, edges_value_input,edges_adj_input], [pair_tower2,nt_tower])   
+    edge_pred_model = Model([graph_input, node_input, edges_value_input,edges_adj_input], [pair_tower2,nt_tower])   
     #node_pred_model = Model([node_input, edges_value_input,edges_adj_input], y_pred_nodes)  
     return edge_pred_model
 
@@ -455,8 +482,8 @@ class RnaGenerator_augment_gcn_torch(Dataset):
 
     def __getitem__(self, index):
         batch_data = self.dataset.iloc[index * self.batch_size: (index + 1) * self.batch_size] 
-        [X,EE_val,EE_adj], [Y, nt_Y ] = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
-        return [X,EE_val,EE_adj], [Y, nt_Y ]
+        [g, X,EE_val,EE_adj], [Y, nt_Y ] = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
+        return [g, X,EE_val,EE_adj], [Y, nt_Y ]
 
 
 
@@ -478,9 +505,9 @@ class RnaGenerator_augment_gcn(Sequence):
     def __getitem__(self, index):
         batch_data = self.dataset.iloc[index * self.batch_size: (index + 1) * self.batch_size] # select rows of dataframe
         
-        X,EE_val,EE_adj, Y, nt_Y = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
+        g, X,EE_val,EE_adj, Y, nt_Y = get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, self.expected_n_channels)
 
-        return [X,EE_val,EE_adj], [Y, nt_Y ]
+        return [g, X,EE_val,EE_adj], [Y, nt_Y ]
         
 
 def get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = 0):
@@ -911,6 +938,7 @@ def get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = 0):
         ###### DGL GRAPH STRUCTURE CREATION 
         src, dst = np.nonzero(E_adj)
         g = dgl.graph((src, dst))
+        g = dgl.add_self_loop(g)
         g.ndata['feat'] = X
         g.edata['feat'] = E_val
 
@@ -919,7 +947,7 @@ def get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = 0):
 
 def get_input_output_rna_augment_bin_ntApairRegularized_gcn(batch_data, expected_n_channels):
     # get maximum length
-    OUTL = batch_data["Length"].max()
+    OUTL = batch_data["Length" ].max()
 
     #### find the dimension
     total_dim = len(batch_data)
@@ -1412,17 +1440,17 @@ os.system('mkdir -p ' + dir_out)
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint
 
-# Allow GPU memory growth
-if hasattr(tf, 'GPUOptions'):
-    from tensorflow.python.keras import backend as K
-    gpu_options = tf.GPUOptions(allow_growth=True)
-    sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
-    #K.tensorflow_backend.set_session(sess)
-    K.set_session(sess)
-else:
-    # For other GPUs
-    for gpu in tf.config.experimental.list_physical_devices('GPU'):
-        tf.config.experimental.set_memory_growth(gpu, True)
+# # Allow GPU memory growth
+# if hasattr(tf, 'GPUOptions'):
+#     from tensorflow.python.keras import backend as K
+#     gpu_options = tf.GPUOptions(allow_growth=True)
+#     sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+#     #K.tensorflow_backend.set_session(sess)
+#     K.set_session(sess)
+# else:
+#     # For other GPUs
+#     for gpu in tf.config.experimental.list_physical_devices('GPU'):
+#         tf.config.experimental.set_memory_growth(gpu, True)
 
 print('')
 print('Build a model..')
@@ -1642,7 +1670,7 @@ if flag_eval_only == 0:
             E_adj_all = []
             for i in rna_idxs:
                 idx += 1
-                X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(eva_dataset, i, fea_type = feature_type)
+                g, X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(eva_dataset, i, fea_type = feature_type)
                 
                 #X, E_val, E_adj,Y0,nt_Y0 = get_feature_and_y_ntApairRegularized_gcn(batch_data, i, fea_type = feature_type)
                          
